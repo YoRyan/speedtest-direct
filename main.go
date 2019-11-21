@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"math/rand"
 	"net/http"
@@ -110,9 +111,12 @@ func SignalServer(ws *websocket.Conn) {
 }
 
 func main() {
-	cm.Run()
+	pathPtr := flag.String("path", ".", "serve files from here")
+	addrPtr := flag.String("addr", ":8080", "listen address")
+	flag.Parse()
 
-	http.Handle("/", http.FileServer(http.Dir("static")))
+	cm.Run()
+	http.Handle("/", http.FileServer(http.Dir(*pathPtr)))
 	http.Handle("/signal", websocket.Handler(SignalServer))
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(*addrPtr, nil))
 }
