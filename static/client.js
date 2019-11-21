@@ -92,20 +92,20 @@ class SignalSocket {
                         try {
                                 packet = JSON.parse(await this.aws.read());
                         } catch (err) {
-                                this.error(err);
+                                await this.error(err);
                                 break;
                         }
                         if (packet.Id !== undefined) {
                                 this.pending.get(packet.Id).put(packet);
                                 this.pending.delete(packet.Id);
                         } else if (packet.Datab64 !== undefined) {
-                                this.readq.put(packet);
+                                await this.readq.put(packet);
                         }
                 }
         }
-        error(err) {
+        async error(err) {
                 this.err = err;
-                this.readq.put(null);
+                await this.readq.put(null);
                 this.pending.forEach((q, id) => { q.put(null); });
                 this.pending = new Map();
         }
