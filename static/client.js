@@ -242,42 +242,23 @@ async function main() {
 async function pair(socket) {
         const id = (await socket.send({}, 0)).You;
 
-        let popup = document.createElement("div");
-        popup.setAttribute("id", "connect");
-        document.body.appendChild(popup);
+        let template = document.getElementById("connect").content;
+        let popup = template.querySelector(".popup");
+        document.body.insertBefore(template, document.body.firstChild);
 
-        let identLabel = document.createElement("p");
-        identLabel.appendChild(document.createTextNode("Your identifier is:"));
-        identLabel.setAttribute("id", "connect-label");
-        popup.appendChild(identLabel);
+        let ident = document.getElementById("my-ident");
+        ident.textContent = idWords(id).join(" ");
 
-        let ident = document.createElement("p");
-        ident.appendChild(document.createTextNode(idWords(id).join(" ")));
-        ident.setAttribute("id", "connect-ident");
-        popup.appendChild(ident);
-
-        let form = document.createElement("form");
-        popup.appendChild(form);
-
-        let formLabel = document.createElement("p");
-        formLabel.appendChild(document.createTextNode("Identifier to connect to:"));
-        form.appendChild(formLabel);
-
-        let formField = document.createElement("input");
-        formField.setAttribute("type", "text");
-        form.appendChild(formField);
-
-        let formSubmit = document.createElement("input");
-        formSubmit.setAttribute("type", "submit");
-        form.appendChild(formSubmit);
-
+        let form = popup.querySelector("form");
+        let label = form.querySelector("label");
+        let input = document.getElementById("their-ident");
         form.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                const inputId = wordsId(...formField.value.split(" "));
+                const inputId = wordsId(...input.value.split(" "));
                 if (inputId === -1)
-                        formLabel.textContent = "Invalid identifier.";
+                        label.textContent = "Invalid identifier.";
                 else if (inputId === id)
-                        formLabel.textContent = "You cannot connect to yourself.";
+                        label.textContent = "You cannot connect to yourself.";
                 else
                         await socket.send("PING", inputId);
         });
@@ -285,10 +266,10 @@ async function pair(socket) {
         const msg = await socket.read();
         if (msg.Data === "PING") {
                 await socket.send("PONG", msg.Src);
-                popup.parentNode.removeChild(popup);
+                popup.remove();
                 return -msg.Src;
         } else if (msg.Data === "PONG") {
-                popup.parentNode.removeChild(popup);
+                popup.remove();
                 return msg.Src;
         }
 }
