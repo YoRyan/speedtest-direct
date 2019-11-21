@@ -201,8 +201,8 @@ async function main() {
 
         /* Run speed tests. */
         while (true) {
-                let speedDownDisplay = document.getElementById("#speed-down > span");
-                let speedUpDisplay = document.getElementById("#speed-up > span");
+                let speedDownDisplay = document.querySelector("#speed-down > span");
+                let speedUpDisplay = document.querySelector("#speed-up > span");
 
                 testButton.disabled = testSize.disabled = false;
                 let op = await select([testButton, "click"], [speed, "message"]);
