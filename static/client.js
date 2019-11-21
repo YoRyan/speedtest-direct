@@ -130,8 +130,8 @@ class SignalSocket {
 }
 
 async function main() {
-        let testButton = document.getElementById("launch-test");
-        let testSize = document.getElementById("test-size");
+        let testButton = document.querySelector("#controls button");
+        let testSize = document.querySelector("#controls select");
         testButton.disabled = testSize.disabled = true;
 
         const wsp = location.protocol === "https:" ? "wss" : "ws";
@@ -174,7 +174,7 @@ async function main() {
         await Promise.all([select([ping, "open"]), select([speed, "open"])]);
 
         /* Start background ping. */
-        let latencyDisplay = document.getElementById("latency-value");
+        let latencyDisplay = document.querySelector("#latency > span");
         new Promise(async (resolve, reject) => {
                 let waitFor = (channel, test) => {
                         let handler = (event, resolve) => {
@@ -201,8 +201,8 @@ async function main() {
 
         /* Run speed tests. */
         while (true) {
-                let speedDownDisplay = document.getElementById("speed-down-value");
-                let speedUpDisplay = document.getElementById("speed-up-value");
+                let speedDownDisplay = document.getElementById("#speed-down > span");
+                let speedUpDisplay = document.getElementById("#speed-up > span");
 
                 testButton.disabled = testSize.disabled = false;
                 let op = await select([testButton, "click"], [speed, "message"]);
