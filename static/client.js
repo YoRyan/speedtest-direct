@@ -287,7 +287,7 @@ function wordsId() {
         const words = Bip39Words;
         let id = 0;
         for (let i = arguments.length - 1; i >= 0; i--) {
-                const v = words.findIndex((w) => w === arguments[i]);
+                const v = words.findIndex((w) => w === arguments[i].toLowerCase());
                 if (v === -1)
                         return -1;
                 id += v*Math.pow(words.length, arguments.length - i - 1);
