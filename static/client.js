@@ -64,15 +64,16 @@ class AsyncWebSocket {
                 });
         }
         send(data) { this._ws.send(data); }
-        read() {
-                return new Promise(async (resolve, reject) => {
-                        let op = await select([this._ws, "message"],
-                                              [this._ws, "error"]);
-                        if (op.name === "message")
-                                resolve(op.event.data);
-                        else
-                                reject(op.event);
-                });
+        async *read() {
+                while (true)
+                        yield await new Promise(async (resolve, reject) => {
+                                let op = await select([this._ws, "message"],
+                                                      [this._ws, "error"]);
+                                if (op.name === "message")
+                                        resolve(op.event.data);
+                                else
+                                        reject(op.event);
+                        });
         }
 }
 class SignalSocket {
@@ -89,20 +90,18 @@ class SignalSocket {
                 return this;
         }
         async _readLoop() {
-                while (true) {
-                        let packet;
-                        try {
-                                packet = JSON.parse(await this._aws.read());
-                        } catch (err) {
-                                await this._error(err);
-                                break;
+                try {
+                        for await (let msg of this._aws.read()) {
+                                let packet = JSON.parse(msg);
+                                if (packet.Id !== undefined) {
+                                        this._pending.get(packet.Id).put(packet);
+                                        this._pending.delete(packet.Id);
+                                } else if (packet.Datab64 !== undefined) {
+                                        await this._readq.put(packet);
+                                }
                         }
-                        if (packet.Id !== undefined) {
-                                this._pending.get(packet.Id).put(packet);
-                                this._pending.delete(packet.Id);
-                        } else if (packet.Datab64 !== undefined) {
-                                await this._readq.put(packet);
-                        }
+                } catch (err) {
+                        await this._error(err);
                 }
         }
         async _error(err) {
@@ -122,12 +121,14 @@ class SignalSocket {
                         throw this._err;
                 return ack;
         }
-        async read() {
-                const packet = await this._readq.get();
-                if (packet === null)
-                        throw this._err;
-                return { Data: JSON.parse(atob(packet.Datab64)),
-                         Src: packet.Src, Dest: packet.Dest };
+        async *read() {
+                while (true) {
+                        const packet = await this._readq.get();
+                        if (packet === null)
+                                throw this._err;
+                        yield { Data: JSON.parse(atob(packet.Datab64)),
+                                Src: packet.Src, Dest: packet.Dest };
+                }
         }
 }
 class PingTest {
@@ -247,7 +248,7 @@ class AsyncGeneratorLoop {
         }
         start() {
                 if (this._run)
-                        return;
+                        return this;
                 this._run = true;
                 this._loop = new Promise(async (resolve, reject) => {
                         while (this._run) {
@@ -256,6 +257,7 @@ class AsyncGeneratorLoop {
                         }
                         resolve();
                 });
+                return this;
         }
         async stop() {
                 if (!this._run)
@@ -326,8 +328,7 @@ async function main() {
                 let pingTest = new PingTest(ping, Number(initiator));
                 let pingLoop = new AsyncGeneratorLoop(pingTest.run(), (ms) => {
                         latencyDisplay.textContent = `${ms} ms`;
-                });
-                pingLoop.start();
+                }).start();
 
                 let op = await select([testButton, "click"], [speed, "message"]);
                 testButton.disabled = testSize.disabled = true;
@@ -404,7 +405,7 @@ async function pair(socket) {
                         await socket.send("PING", inputId);
         });
 
-        const msg = await socket.read();
+        const msg = (await socket.read().next()).value;
         if (msg.Data === "PING") {
                 await socket.send("PONG", msg.Src);
                 popup.remove();
@@ -436,9 +437,10 @@ function wordsId() {
         return id;
 }
 async function readFrom(socket, id) {
+        let gen = socket.read();
         let msg;
         do
-                msg = await socket.read();
+                msg = (await gen.next()).value;
         while (msg.Src !== id);
         return msg;
 }
