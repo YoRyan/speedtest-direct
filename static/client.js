@@ -128,6 +128,73 @@ class SignalSocket {
                          Src: packet.Src, Dest: packet.Dest };
         }
 }
+class PingTest {
+        constructor(channel, side) {
+                this._channel = channel;
+                this._side = side;
+                this._callbacks = new Map();
+                new Promise((resolve, reject) => { this._loop(); });
+        }
+        async _loop() {
+                while (true) {
+                        let op = await select([this._channel, "message"],
+                                              [this._channel, "error"],
+                                              [this._channel, "close"]);
+                        if (op.name !== "message")
+                                break;
+                        let packet = JSON.parse(op.event.data);
+                        if (packet.side === this._side
+                            && this._callbacks.has(packet.key)) {
+                                let callback = this._callbacks.get(packet.key);
+                                this._callbacks.delete(packet.key);
+                                callback();
+                        } else if (packet.side !== this._side) {
+                                this._channel.send(op.event.data);
+                        }
+                }
+        }
+        async *run() {
+                while (true) {
+                        const t0 = Date.now();
+                        await new Promise((resolve, reject) => {
+                                this.send(t0, resolve);
+                        });
+                        yield Date.now() - t0;
+                        await sleep(1000);
+                }
+        }
+        send(theKey, callback) {
+                const packet = {side: this._side, key: theKey };
+                this._callbacks.set(theKey, callback);
+                this._channel.send(JSON.stringify(packet));
+        }
+}
+class AsyncGeneratorLoop {
+        constructor(generator, callback) {
+                this._generator = generator;
+                this._callback = callback;
+                this._run = false;
+                this._loop = null;
+        }
+        start() {
+                if (this._run)
+                        return;
+                this._run = true;
+                this._loop = new Promise(async (resolve, reject) => {
+                        while (this._run) {
+                                const v = (await this._generator.next()).value;
+                                this._callback(v);
+                        }
+                        resolve();
+                });
+        }
+        async stop() {
+                if (!this._run)
+                        return;
+                this._run = false;
+                await this._loop;
+        }
+}
 
 async function main() {
         let testButton = document.querySelector("#controls button");
@@ -173,40 +240,25 @@ async function main() {
         let speed = rtc.createDataChannel("ping", { negotiated: true, id: 1 });
         await Promise.all([select([ping, "open"]), select([speed, "open"])]);
 
-        /* Start background ping. */
-        let latencyDisplay = document.querySelector("#latency > span");
-        new Promise(async (resolve, reject) => {
-                let waitFor = (channel, test) => {
-                        let handler = (event, resolve) => {
-                                if (test(event.data))
-                                        resolve();
-                                else
-                                        channel.send(event.data);
-                        };
-                        return new Promise((resolve, reject) => {
-                                channel.onmessage = (event) => {
-                                        handler(event, resolve);
-                                };
-                        });
-                };
-                while (true) {
-                        const t0 = Date.now();
-                        ping.send(t0);
-                        await waitFor(ping, (v) => v === String(t0));
-                        const t1 = Date.now();
-                        latencyDisplay.textContent = `${t1 - t0} ms`;
-                        await sleep(1000);
-                }
-        });
-
-        /* Run speed tests. */
+        /* Run ping and speed tests. */
         while (true) {
                 let speedDownDisplay = document.querySelector("#speed-down > span");
                 let speedUpDisplay = document.querySelector("#speed-up > span");
-
+                let latencyDisplay = document.querySelector("#latency > span");
                 testButton.disabled = testSize.disabled = false;
+
+                let pingTest = new PingTest(ping, Number(initiator));
+                let pingLoop = new AsyncGeneratorLoop(pingTest.run(), (ms) => {
+                        latencyDisplay.textContent = `${ms} ms`;
+                });
+                pingLoop.start();
+
                 let op = await select([testButton, "click"], [speed, "message"]);
                 testButton.disabled = testSize.disabled = true;
+
+                await pingLoop.stop();
+                latencyDisplay.textContent = "";
+
                 let runTest = async (test, display) => {
                         let average = 0.0;
                         let i = 0;
