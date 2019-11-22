@@ -2,7 +2,6 @@
 
 const STUN_SERVERS = ["stun:stun.l.google.com:19302"];
 const REPORT_INTERVAL = 200;
-const BPMS2MBPS = 1e-3*1e-3*8*1e3;
 
 class Semaphore {
         constructor(value) {
@@ -207,8 +206,7 @@ class SpeedTest {
                 for (let i = 0, i0 = 0, t0 = Date.now(); i < nBuf; i++) {
                         const now = Date.now();
                         if (now - t0 >= REPORT_INTERVAL) {
-                                const xferred = (i - i0)*buffer.byteLength;
-                                yield xferred/(now - t0)*BPMS2MBPS;
+                                yield (i - i0)*buffer.byteLength/(now - t0);
                                 i0 = i;
                                 t0 = now;
                         }
@@ -219,11 +217,13 @@ class SpeedTest {
                 await flush(this._channel);
         }
         async *_download() {
-                for (let i = 0, bytes = 0, t0 = Date.now(), received = null;
-                     received !== "END"; i++) {
+                let bytes = 0;
+                let t0 = Date.now();
+                let received;
+                do {
                         const now = Date.now();
                         if (now - t0 >= REPORT_INTERVAL) {
-                                yield bytes/(now - t0)*BPMS2MBPS;
+                                yield bytes/(now - t0);
                                 bytes = 0;
                                 t0 = now;
                         }
@@ -236,7 +236,7 @@ class SpeedTest {
                                 bytes += received.byteLength;
                         else if (received.size !== undefined) /* firefox */
                                 bytes += received.size;
-                }
+                } while (received !== "END");
         }
 }
 class AsyncGeneratorLoop {
@@ -351,10 +351,11 @@ async function main() {
                         throw(op.target);
                 }
                 let fmtSpeed = (v) => {
-                        if (v < 1.0)
-                                return `${Math.round(v*1e3*1e1)/1e1} Kbps`;
+                        const m = v*1e-3*1e-3*8*1e3;
+                        if (m < 1.0)
+                                return `${Math.round(m*1e3*1e1)/1e1} Kbps`;
                         else
-                                return `${Math.round(v*1e1)/1e1} Mbps`;
+                                return `${Math.round(m*1e1)/1e1} Mbps`;
                 };
                 let speedTest = new SpeedTest(speed, speedBytes, (dir, s) => {
                         switch (dir) {
