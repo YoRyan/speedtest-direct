@@ -1,0 +1,27 @@
+body {
+        text-align: center;
+        font-size: 1.5rem;
+}
+.display {
+        text-align: center;
+        text-transform: uppercase;
+        font-size: 80%;
+        width: 15rem;
+        display: inline-block;
+}
+.display > span {
+        text-transform: none;
+        font-size: 200%;
+        display: block;
+}
+.display > span:empty:after {
+        content: "—";
+}
+#controls > * {
+        font-size: 2rem;
+}
+
+#connect-popup dl {
+        text-align: left;
+        font-size: 1rem;
+}

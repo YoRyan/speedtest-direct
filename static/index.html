@@ -2,16 +2,19 @@
 <html>
 <head>
         <title>speedtest.direct</title>
+        <link rel="stylesheet" href="style.css">
 </head>
 <body>
         <header>
                 <h1>speedtest.direct</h1>
         </header>
-        <section id="display">
+        <section id="displays">
                 <p id="status"></p>
-                <p id="speed-down">Down<span></span></p>
-                <p id="speed-up">Up<span></span></p>
-                <p id="latency">Ping<span></span></p>
+                <div>
+                        <p id="speed-down" class="display">Down<span></span></p>
+                        <p id="speed-up" class="display">Up<span></span></p>
+                </div>
+                <p id="latency" class="display">Ping<span></span></p>
         </section>
         <section id="controls">
                 <select>
@@ -23,7 +26,7 @@
                 <button>Test</button>
         </section>
         <template id="connect">
-        <div class="popup">
+        <div id="connect-popup">
                 <label for="my-ident">Your identifier is:</label>
                 <p id="my-ident"></p>
                 <form>

@@ -386,7 +386,7 @@ async function pair(socket) {
         const id = (await socket.send({}, 0)).You;
 
         let template = document.getElementById("connect").content;
-        let popup = template.querySelector(".popup");
+        let popup = template.getElementById("connect-popup");
         document.body.insertBefore(template, document.body.firstChild);
 
         let ident = document.getElementById("my-ident");
