@@ -169,6 +169,73 @@ class PingTest {
                 this._channel.send(JSON.stringify(packet));
         }
 }
+class SpeedTest {
+        constructor(channel, totalBytes, callback) {
+                this._channel = channel;
+                this._total = totalBytes;
+                this._callback = callback;
+        }
+        async run(sendFirst) {
+                let upload = async () => {
+                        for await (let speed of this._upload())
+                                this._callback("UPLOAD", speed);
+                        this._callback("UPLOAD-END", undefined);
+                };
+                let download = async () => {
+                        for await (let speed of this._download())
+                                this._callback("DOWNLOAD", speed);
+                        this._callback("DOWNLOAD-END", undefined);
+                };
+                if (sendFirst) {
+                        await upload();
+                        await download();
+                } else {
+                        await download();
+                        await upload();
+                }
+        }
+        async *_upload() {
+                const buffer = new ArrayBuffer(16*1e3);
+                const nBuf = Math.ceil(this._total/buffer.byteLength);
+                let flush = async (ch) => {
+                        while (ch.bufferedAmount > 0)
+                                await sleep(0);
+                };
+                for (let i = 0, i0 = 0, t0 = Date.now(); i < nBuf; i++) {
+                        const now = Date.now();
+                        if (now - t0 >= REPORT_INTERVAL) {
+                                const xferred = (i - i0)*buffer.byteLength;
+                                yield xferred/(now - t0)*BPMS2MBPS;
+                                i0 = i;
+                                t0 = now;
+                        }
+                        this._channel.send(buffer);
+                        await flush(this._channel);
+                }
+                this._channel.send("END");
+                await flush(this._channel);
+        }
+        async *_download() {
+                for (let i = 0, bytes = 0, t0 = Date.now(), received = null;
+                     received !== "END"; i++) {
+                        const now = Date.now();
+                        if (now - t0 >= REPORT_INTERVAL) {
+                                yield bytes/(now - t0)*BPMS2MBPS;
+                                bytes = 0;
+                                t0 = now;
+                        }
+                        let op = await select([this._channel, "message"],
+                                              [this._channel, "error"]);
+                        if (op.name === "error")
+                                throw op.event;
+                        received = op.event.data;
+                        if (received.byteLength !== undefined) /* chrome */
+                                bytes += received.byteLength;
+                        else if (received.size !== undefined) /* firefox */
+                                bytes += received.size;
+                }
+        }
+}
 class AsyncGeneratorLoop {
         constructor(generator, callback) {
                 this._generator = generator;
@@ -193,6 +260,15 @@ class AsyncGeneratorLoop {
                         return;
                 this._run = false;
                 await this._loop;
+        }
+}
+class Average {
+        constructor() {
+                this._i = this.value = 0;
+        }
+        sample(v) {
+                this.value = (this.value*this._i + v)/(this._i + 1);
+                this._i++;
         }
 }
 
@@ -259,36 +335,49 @@ async function main() {
                 await pingLoop.stop();
                 latencyDisplay.textContent = "";
 
-                let runTest = async (test, display) => {
-                        let average = 0.0;
-                        let i = 0;
-                        for await (let v of test) {
-                                average = (average*i + v)/(i + 1);
-                                i++;
-                                showSpeed(display, v);
-                        }
-                        showSpeed(display, average);
-                };
-                let showSpeed = (display, value) => {
-                        let text;
-                        if (value < 1.0)
-                                text = `${Math.round(value*1e3*1e1)/1e1} Kbps`;
-                        else
-                                text = `${Math.round(value*1e1)/1e1} Mbps`;
-                        display.textContent = text;
-                };
-                if (op.target === testButton) {
-                        const testBytes = parseInt(testSize.value);
-                        speed.send(testBytes);
-                        await runTest(sendSpeedTest(speed, testBytes),
-                                      speedUpDisplay);
-                        await runTest(receiveSpeedTest(speed), speedDownDisplay);
-                } else if (op.target === speed) {
-                        const testBytes = parseInt(op.event.data);
-                        await runTest(receiveSpeedTest(speed), speedDownDisplay);
-                        await runTest(sendSpeedTest(speed, testBytes),
-                                      speedUpDisplay);
+                let speedUpAvg = new Average();
+                let speedDownAvg = new Average();
+                let speedBytes;
+                switch (op.target) {
+                case testButton:
+                        speedBytes = parseInt(testSize.value);
+                        speed.send(String(speedBytes));
+                        break;
+                case speed:
+                        speedBytes = parseInt(op.event.data);
+                        break;
+                default:
+                        throw(op.target);
                 }
+                let fmtSpeed = (v) => {
+                        if (v < 1.0)
+                                return `${Math.round(v*1e3*1e1)/1e1} Kbps`;
+                        else
+                                return `${Math.round(v*1e1)/1e1} Mbps`;
+                };
+                let speedTest = new SpeedTest(speed, speedBytes, (dir, s) => {
+                        switch (dir) {
+                        case "UPLOAD":
+                                speedUpAvg.sample(s);
+                                speedUpDisplay.textContent = fmtSpeed(s);
+                                break;
+                        case "UPLOAD-END":
+                                speedUpDisplay.textContent = fmtSpeed(
+                                        speedUpAvg.value);
+                                break;
+                        case "DOWNLOAD":
+                                speedDownAvg.sample(s);
+                                speedDownDisplay.textContent = fmtSpeed(s);
+                                break;
+                        case "DOWNLOAD-END":
+                                speedDownDisplay.textContent = fmtSpeed(
+                                        speedDownAvg.value);
+                                break;
+                        default:
+                                throw(dir);
+                        }
+                });
+                await speedTest.run(op.target === testButton);
         }
 }
 async function pair(socket) {
@@ -352,45 +441,6 @@ async function readFrom(socket, id) {
                 msg = await socket.read();
         while (msg.Src !== id);
         return msg;
-}
-async function* sendSpeedTest(channel, totalBytes) {
-        const buffer = new ArrayBuffer(16*1e3);
-        const nBuf = Math.ceil(totalBytes/buffer.byteLength);
-        let flush = async (ch) => {
-                while (ch.bufferedAmount > 0)
-                        await sleep(0);
-        };
-        for (let i = 0, i0 = 0, t0 = Date.now(); i < nBuf; i++) {
-                const now = Date.now();
-                if (now - t0 >= REPORT_INTERVAL) {
-                        yield (i - i0)*buffer.byteLength/(now - t0)*BPMS2MBPS;
-                        i0 = i;
-                        t0 = now;
-                }
-                channel.send(buffer);
-                await flush(channel);
-        }
-        channel.send("END");
-        await flush(channel);
-}
-async function* receiveSpeedTest(channel) {
-        let received;
-        for (let i = 0, bytes = 0, t0 = Date.now(); received !== "END"; i++) {
-                const now = Date.now();
-                if (now - t0 >= REPORT_INTERVAL) {
-                        yield bytes/(now - t0)*BPMS2MBPS;
-                        bytes = 0;
-                        t0 = now;
-                }
-                let op = await select([channel, "message"], [channel, "error"]);
-                if (op.name === "error")
-                        throw op.event;
-                received = op.event.data;
-                if (received.byteLength !== undefined) /* chrome */
-                        bytes += received.byteLength;
-                else if (received.size !== undefined) /* firefox */
-                        bytes += received.size;
-        }
 }
 function sleep(ms) {
         return new Promise((resolve, reject) => {
