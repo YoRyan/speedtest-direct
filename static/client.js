@@ -8,40 +8,40 @@ class Semaphore {
         constructor(value) {
                 if (typeof value !== "number" || value < 0)
                         throw "semaphore value must be a non-negative integer";
-                this.value = value;
-                this.waiting = [];
+                this._value = value;
+                this._waiting = [];
         }
         up() {
-                this.value++;
-                let consumer = this.waiting.shift();
+                this._value++;
+                let consumer = this._waiting.shift();
                 if (consumer !== undefined)
                         consumer();
         }
         async down() {
-                if (this.value === 0)
+                if (this._value === 0)
                         await new Promise((resolve, reject) => {
-                                this.waiting.push(resolve);
+                                this._waiting.push(resolve);
                         });
-                this.value--;
+                this._value--;
         }
 }
 class Queue {
         constructor(capacity) {
                 if (typeof capacity !== "number" || capacity <= 0)
                         throw "queue capacity must be a positive integer";
-                this.queue = [];
-                this.semProduce = new Semaphore(capacity);
-                this.semConsume = new Semaphore(0);
+                this._queue = [];
+                this._semProduce = new Semaphore(capacity);
+                this._semConsume = new Semaphore(0);
         }
         async put(value) {
-                await this.semProduce.down();
-                this.queue.push(value);
-                this.semConsume.up();
+                await this._semProduce.down();
+                this._queue.push(value);
+                this._semConsume.up();
         }
         async get() {
-                await this.semConsume.down();
-                let value = this.queue.shift();
-                this.semProduce.up();
+                await this._semConsume.down();
+                let value = this._queue.shift();
+                this._semProduce.up();
                 return value;
         }
 }
@@ -51,22 +51,23 @@ class Channel extends Queue {
 
 class AsyncWebSocket {
         constructor(url, protocols = []) {
-                this.ws = new WebSocket(url, protocols);
+                this._ws = new WebSocket(url, protocols);
         }
         open() {
                 return new Promise(async (resolve, reject) => {
-                        let op = await select([this.ws, "open"], [this.ws, "error"]);
+                        let op = await select([this._ws, "open"],
+                                              [this._ws, "error"]);
                         if (op.name === "open")
                                 resolve();
                         else
                                 reject(op.event);
                 });
         }
-        send(data) { this.ws.send(data); }
+        send(data) { this._ws.send(data); }
         read() {
                 return new Promise(async (resolve, reject) => {
-                        let op = await select([this.ws, "message"],
-                                              [this.ws, "error"]);
+                        let op = await select([this._ws, "message"],
+                                              [this._ws, "error"]);
                         if (op.name === "message")
                                 resolve(op.event.data);
                         else
@@ -76,54 +77,55 @@ class AsyncWebSocket {
 }
 class SignalSocket {
         constructor() {
-                this.aws = new AsyncWebSocket(...arguments);
-                this.counter = 0;
-                this.pending = new Map();
-                this.readq = new Queue(100);
-                this.err = null;
+                this._aws = new AsyncWebSocket(...arguments);
+                this._counter = 0;
+                this._pending = new Map();
+                this._readq = new Queue(100);
+                this._err = null;
         }
         async open() {
-                await this.aws.open();
-                new Promise((resolve, reject) => { this.readLoop(); });
+                await this._aws.open();
+                new Promise((resolve, reject) => { this._readLoop(); });
+                return this;
         }
-        async readLoop() {
+        async _readLoop() {
                 while (true) {
                         let packet;
                         try {
-                                packet = JSON.parse(await this.aws.read());
+                                packet = JSON.parse(await this._aws.read());
                         } catch (err) {
-                                await this.error(err);
+                                await this._error(err);
                                 break;
                         }
                         if (packet.Id !== undefined) {
-                                this.pending.get(packet.Id).put(packet);
-                                this.pending.delete(packet.Id);
+                                this._pending.get(packet.Id).put(packet);
+                                this._pending.delete(packet.Id);
                         } else if (packet.Datab64 !== undefined) {
-                                await this.readq.put(packet);
+                                await this._readq.put(packet);
                         }
                 }
         }
-        async error(err) {
-                this.err = err;
-                await this.readq.put(null);
-                this.pending.forEach((q, id) => { q.put(null); });
-                this.pending = new Map();
+        async _error(err) {
+                this._err = err;
+                await this._readq.put(null);
+                this._pending.forEach((q, id) => { q.put(null); });
+                this._pending = new Map();
         }
         async send(data, destination) {
-                const id = ++this.counter;
+                const id = ++this._counter;
                 let wait = new Channel();
-                this.pending.set(id, wait);
-                this.aws.send(JSON.stringify({ Datab64: btoa(JSON.stringify(data)),
-                                               Dest: destination, Id: id }));
+                this._pending.set(id, wait);
+                this._aws.send(JSON.stringify({ Datab64: btoa(JSON.stringify(data)),
+                                                Dest: destination, Id: id }));
                 const ack = await wait.get();
                 if (ack === null)
-                        throw this.err;
+                        throw this._err;
                 return ack;
         }
         async read() {
-                const packet = await this.readq.get();
+                const packet = await this._readq.get();
                 if (packet === null)
-                        throw this.err;
+                        throw this._err;
                 return { Data: JSON.parse(atob(packet.Datab64)),
                          Src: packet.Src, Dest: packet.Dest };
         }
@@ -157,13 +159,13 @@ class PingTest {
                 while (true) {
                         const t0 = Date.now();
                         await new Promise((resolve, reject) => {
-                                this.send(t0, resolve);
+                                this._send(t0, resolve);
                         });
                         yield Date.now() - t0;
                         await sleep(1000);
                 }
         }
-        send(theKey, callback) {
+        _send(theKey, callback) {
                 const packet = {side: this._side, key: theKey };
                 this._callbacks.set(theKey, callback);
                 this._channel.send(JSON.stringify(packet));
@@ -278,9 +280,7 @@ async function main() {
         testButton.disabled = testSize.disabled = true;
 
         const wsp = location.protocol === "https:" ? "wss" : "ws";
-        let ss = new SignalSocket(`${wsp}://${location.host}/signal`);
-        await ss.open();
-
+        let ss = await (new SignalSocket(`${wsp}://${location.host}/signal`)).open();
         const pairId = await pair(ss);
         const initiator = pairId > 0;
         const otherId = Math.abs(pairId);
