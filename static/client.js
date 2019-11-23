@@ -52,14 +52,15 @@ class AsyncWebSocket {
         constructor(url, protocols = []) {
                 this._ws = new WebSocket(url, protocols);
         }
-        open() {
-                return new Promise(async (resolve, reject) => {
+        async open() {
+                await new Promise(async (resolve, reject) => {
                         let op = await select([this._ws, "open", "error"]);
                         if (op.name === "open")
                                 resolve();
                         else
                                 reject(op.event);
                 });
+                return this;
         }
         send(data) { this._ws.send(data); }
         async *read() {
@@ -455,7 +456,7 @@ async function readFrom(socket, id) {
         while (msg.Src !== id);
         return msg;
 }
-function sleep(ms) {
+async function sleep(ms) {
         return new Promise((resolve, reject) => {
                 if (typeof ms === "number" && ms >= 0)
                         setTimeout(() => { resolve(); }, ms);
@@ -463,7 +464,7 @@ function sleep(ms) {
                         reject("invalid timeout value");
         });
 }
-function select() {
+async function select() {
         let sources = arguments;
         return new Promise((resolve, reject) => {
                 let toRemove = new Map();
