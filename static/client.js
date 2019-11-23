@@ -476,8 +476,7 @@ async function promise(task, ...args) {
                 resolve(res);
         });
 }
-async function select() {
-        let sources = arguments;
+async function select(...sources) {
         return new Promise((resolve, reject) => {
                 let toRemove = new Map();
                 let cleanup = () => {
@@ -487,11 +486,10 @@ async function select() {
                                 target.removeEventListener(eventName, handler);
                         });
                 };
-                for (let i = 0; i < sources.length; i++) {
-                        let target = sources[i][0];
-                        let events = sources[i][Symbol.iterator]();
-                        events.next();
-                        for (const eventName of events) {
+                sources.forEach((source) => {
+                        let it = source[Symbol.iterator]();
+                        let target = it.next().value;
+                        for (const eventName of it) {
                                 let handler = (ev) => {
                                         cleanup();
                                         resolve({ target: target, name: eventName,
@@ -500,7 +498,7 @@ async function select() {
                                 toRemove.set([target, eventName], handler);
                                 target.addEventListener(eventName, handler);
                         }
-                }
+                });
         });
 }
 
