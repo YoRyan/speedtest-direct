@@ -397,7 +397,7 @@ async function pair(socket) {
         const id = (await socket.send({}, 0)).You;
 
         let popup = document.getElementById("connect-popup");
-        popup.classList.remove("hidden");
+        popup.style.setProperty("display", "block");
 
         let ident = document.getElementById("my-ident");
         ident.textContent = idWords(id).join(" ");
