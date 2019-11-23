@@ -71,8 +71,6 @@ body {
         width: 100%;
         box-sizing: border-box;
 }
-#connect-popup > form > button {
-}
 #connect-popup > dl {
         text-align: left;
         font-size: 1rem;
