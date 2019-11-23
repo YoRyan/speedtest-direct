@@ -6,7 +6,6 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
-        <div id="popup-overlay"></div>
         <header>
                 <h1>speedtest.direct</h1>
         </header>
@@ -28,8 +27,7 @@
                 <button>Test</button>
         </section>
 
-        <template id="connect">
-        <div id="connect-popup" class="popup">
+        <div id="connect-popup" class="popup hidden">
                 <label for="my-ident">Your identifier is:</label>
                 <p id="my-ident"></p>
                 <label for="their-ident">Identifier to connect to:</label>
@@ -58,7 +56,7 @@
                             as possible.</dd>
                 </dl>
         </div>
-        </template>
+        <div id="popup-overlay"></div>
 
         <script src="/words.js"></script>
         <script src="/client.js"></script>

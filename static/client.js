@@ -396,9 +396,8 @@ async function main() {
 async function pair(socket) {
         const id = (await socket.send({}, 0)).You;
 
-        let template = document.getElementById("connect").content;
-        let popup = template.getElementById("connect-popup");
-        document.body.insertBefore(template, document.body.firstChild);
+        let popup = document.getElementById("connect-popup");
+        popup.classList.remove("hidden");
 
         let ident = document.getElementById("my-ident");
         ident.textContent = idWords(id).join(" ");
@@ -418,12 +417,12 @@ async function pair(socket) {
         });
 
         const msg = (await socket.read().next()).value;
+        input.blur();
+        popup.classList.add("hidden");
         if (msg.Data === "PING") {
                 await socket.send("PONG", msg.Src);
-                popup.remove();
                 return -msg.Src;
         } else if (msg.Data === "PONG") {
-                popup.remove();
                 return msg.Src;
         }
 }

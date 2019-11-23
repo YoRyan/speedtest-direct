@@ -1,6 +1,25 @@
 @import url('https://fonts.googleapis.com/css?family=Raleway:400,700&display=swap');
 
+@keyframes slidein {
+        from { left: -100%; }
+        to { left: 0; }
+}
+@keyframes slideout {
+        from { left: 0; }
+        to { left: -100%; }
+}
+@keyframes fadein {
+        from { opacity: 0; height: 0; }
+        1% { opacity: 0; height: 100%; }
+        to { opacity: 0.4; height: 100%; }
+}
+@keyframes fadeout {
+        from { opacity: 0.4; height: 100%; }
+        99% { opacity: 0; height: 100%; }
+        to { opacity: 0; height: 0; }
+}
 body {
+        --fade-time: 500ms;
         text-align: center;
         font-size: 1.5rem;
         font-family: 'Raleway', sans-serif;
@@ -32,27 +51,37 @@ body {
 }
 #popup-overlay {
         background: black;
-        opacity: 0.4;
         position: fixed;
         top: 0;
         bottom: 0;
         left: 0;
         right: 0;
         z-index: 1;
-        display: none;
+        animation-duration: var(--fade-time);
+        animation-name: fadeout;
+        opacity: 0;
+        height: 0;
 }
-.popup ~ #popup-overlay {
-        display: block;
+.popup:not(.hidden) ~ #popup-overlay {
+        animation-name: fadein;
+        opacity: 0.4;
+        height: 100%;
 }
 
 #connect-popup {
         position: absolute;
         top: 0;
-        left: 0;
         width: 90%;
         max-width: 28rem;
         min-height: 100%;
         box-sizing: border-box;
+        animation-duration: var(--fade-time);
+        animation-name: slidein;
+        left: 0;
+}
+#connect-popup.hidden {
+        animation-name: slideout;
+        left: -100%;
 }
 #connect-popup hr {
         width: 3rem;
