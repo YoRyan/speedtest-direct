@@ -49,14 +49,13 @@ body {
         position: absolute;
         top: 0;
         left: 0;
-        width: 95%;
+        width: 90%;
         max-width: 28rem;
         min-height: 100%;
         box-sizing: border-box;
 }
 #connect-popup hr {
         width: 3rem;
-        max-width: 100%;
 }
 #connect-popup #my-ident {
         font-size: 170%;
