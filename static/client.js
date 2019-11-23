@@ -404,7 +404,7 @@ async function pair(socket) {
         ident.textContent = idWords(id).join(" ");
 
         let form = popup.querySelector("form");
-        let label = form.querySelector("label");
+        let label = popup.querySelector("label[for=\"their-ident\"]");
         let input = document.getElementById("their-ident");
         form.addEventListener("submit", async (event) => {
                 event.preventDefault();

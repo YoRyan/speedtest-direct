@@ -20,8 +20,69 @@ body {
 #controls > * {
         font-size: 2rem;
 }
+.popup {
+        background: white;
+        box-shadow: 0 0 0.7rem black;
+        padding: 1.5rem;
+        z-index: 2;
+}
+#popup-overlay {
+        background: black;
+        opacity: 0.4;
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 1;
+        display: none;
+}
+.popup ~ #popup-overlay {
+        display: block;
+}
 
-#connect-popup dl {
+#connect-popup {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 95%;
+        max-width: 28rem;
+        min-height: 100%;
+        box-sizing: border-box;
+}
+#connect-popup hr {
+        width: 3rem;
+        max-width: 100%;
+}
+#connect-popup #my-ident {
+        font-size: 170%;
+        margin: 1rem 0;
+}
+#connect-popup > form {
+        margin-top: 1rem;
+        margin-bottom: 2rem;
+        display: flex;
+}
+#connect-popup > form > input,
+#connect-popup > form > button {
+        font-size: 120%;
+}
+#connect-popup > form > input {
+        text-align: center;
+        width: 100%;
+        box-sizing: border-box;
+        flex: auto;
+}
+#connect-popup > form > button {
+        flex: initial;
+}
+#connect-popup > dl {
         text-align: left;
         font-size: 1rem;
+}
+#connect-popup > dl > dt {
+        font-weight: bold;
+}
+#connect-popup > dl > dd {
+        margin-bottom: 1rem;
 }

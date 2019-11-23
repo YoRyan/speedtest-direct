@@ -5,6 +5,7 @@
         <link rel="stylesheet" href="style.css">
 </head>
 <body>
+        <div id="popup-overlay"></div>
         <header>
                 <h1>speedtest.direct</h1>
         </header>
@@ -25,15 +26,17 @@
                 </select>
                 <button>Test</button>
         </section>
+
         <template id="connect">
-        <div id="connect-popup">
+        <div id="connect-popup" class="popup">
                 <label for="my-ident">Your identifier is:</label>
                 <p id="my-ident"></p>
+                <label for="their-ident">Identifier to connect to:</label>
                 <form>
-                        <label for="their-ident">Identifier to connect to:</label>
-                        <input id="their-ident" type="text">
-                        <button type="submit">Connect</button>
+                        <input id="their-ident" type="text" autofocus>
+                        <button type="submit">➡</button>
                 </form>
+                <hr>
                 <dl>
                         <dt>Another speed test website?</dt>
                         <dd>Yes, but you can use this one to predict the performance
