@@ -54,8 +54,7 @@ class AsyncWebSocket {
         }
         open() {
                 return new Promise(async (resolve, reject) => {
-                        let op = await select([this._ws, "open"],
-                                              [this._ws, "error"]);
+                        let op = await select([this._ws, "open", "error"]);
                         if (op.name === "open")
                                 resolve();
                         else
@@ -66,8 +65,8 @@ class AsyncWebSocket {
         async *read() {
                 while (true)
                         yield await new Promise(async (resolve, reject) => {
-                                let op = await select([this._ws, "message"],
-                                                      [this._ws, "error"]);
+                                let op = await select(
+                                        [this._ws, "message", "error"]);
                                 if (op.name === "message")
                                         resolve(op.event.data);
                                 else
@@ -139,9 +138,8 @@ class PingTest {
         }
         async _loop() {
                 while (true) {
-                        let op = await select([this._channel, "message"],
-                                              [this._channel, "error"],
-                                              [this._channel, "close"]);
+                        let op = await select(
+                                [this._channel, "message", "error", "close"]);
                         if (op.name !== "message")
                                 break;
                         let packet = JSON.parse(op.event.data);
@@ -216,8 +214,7 @@ class SpeedTest {
                         await flush(this._channel);
                 }
                 let ack = new Promise(async (resolve, reject) => {
-                        let op = await select([this._channel, "message"],
-                                              [this._channel, "error"]);
+                        let op = await select([this._channel, "message", "error"]);
                         if (op.name === "error" || op.event.data !== "END-ACK")
                                 throw op.event;
                         resolve();
@@ -237,8 +234,7 @@ class SpeedTest {
                                 bytes = 0;
                                 t0 = now;
                         }
-                        let op = await select([this._channel, "message"],
-                                              [this._channel, "error"]);
+                        let op = await select([this._channel, "message", "error"]);
                         if (op.name === "error")
                                 throw op.event;
                         received = op.event.data;
@@ -335,7 +331,7 @@ async function main() {
                 }).start();
 
                 let op = await select(
-                        [testButton, "click"], [speed, "message"], [speed, "error"]);
+                        [testButton, "click"], [speed, "message", "error"]);
                 if (op.name === "error")
                         throw op.event;
                 testButton.disabled = testSize.disabled = true;
@@ -348,7 +344,7 @@ async function main() {
                 case testButton:
                         speedBytes = parseInt(testSize.value);
                         speed.send(String(speedBytes));
-                        let op2 = await select([speed, "message"], [speed, "error"]);
+                        let op2 = await select([speed, "message", "error"]);
                         if (op2.name === "error" || op2.event.data !== "TEST-ACK")
                                 throw op2.event;
                         break;
@@ -480,14 +476,17 @@ function select() {
                 };
                 for (let i = 0; i < sources.length; i++) {
                         let target = sources[i][0];
-                        let eventName = sources[i][1];
-                        let handler = (ev) => {
-                                cleanup();
-                                resolve({ target: target, name: eventName,
-                                          event: ev});
-                        };
-                        toRemove.set([target, eventName], handler);
-                        target.addEventListener(eventName, handler);
+                        let events = sources[i][Symbol.iterator]();
+                        events.next();
+                        for (const eventName of events) {
+                                let handler = (ev) => {
+                                        cleanup();
+                                        resolve({ target: target, name: eventName,
+                                                  event: ev});
+                                };
+                                toRemove.set([target, eventName], handler);
+                                target.addEventListener(eventName, handler);
+                        }
                 }
         });
 }
