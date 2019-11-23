@@ -179,11 +179,13 @@ class SpeedTest {
         }
         async run(sendFirst) {
                 let upload = async () => {
+                        this._callback("UPLOAD-START", undefined);
                         for await (let speed of this._upload())
                                 this._callback("UPLOAD", speed);
                         this._callback("UPLOAD-END", undefined);
                 };
                 let download = async () => {
+                        this._callback("DOWNLOAD-START", undefined);
                         for await (let speed of this._download())
                                 this._callback("DOWNLOAD", speed);
                         this._callback("DOWNLOAD-END", undefined);
@@ -206,15 +208,23 @@ class SpeedTest {
                 for (let i = 0, i0 = 0, t0 = Date.now(); i < nBuf; i++) {
                         const now = Date.now();
                         if (now - t0 >= REPORT_INTERVAL) {
-                                yield (i - i0)*buffer.byteLength/(now - t0);
+                                yield (i - i0)*buffer.byteLength/(now - t0)*1e3;
                                 i0 = i;
                                 t0 = now;
                         }
                         this._channel.send(buffer);
                         await flush(this._channel);
                 }
+                let ack = new Promise(async (resolve, reject) => {
+                        let op = await select([this._channel, "message"],
+                                              [this._channel, "error"]);
+                        if (op.name === "error" || op.event.data !== "END-ACK")
+                                throw op.event;
+                        resolve();
+                });
                 this._channel.send("END");
                 await flush(this._channel);
+                await ack;
         }
         async *_download() {
                 let bytes = 0;
@@ -223,7 +233,7 @@ class SpeedTest {
                 do {
                         const now = Date.now();
                         if (now - t0 >= REPORT_INTERVAL) {
-                                yield bytes/(now - t0);
+                                yield bytes/(now - t0)*1e3;
                                 bytes = 0;
                                 t0 = now;
                         }
@@ -237,6 +247,7 @@ class SpeedTest {
                         else if (received.size !== undefined) /* firefox */
                                 bytes += received.size;
                 } while (received !== "END");
+                this._channel.send("END-ACK");
         }
 }
 class AsyncGeneratorLoop {
@@ -264,15 +275,6 @@ class AsyncGeneratorLoop {
                         return;
                 this._run = false;
                 await this._loop;
-        }
-}
-class Average {
-        constructor() {
-                this._i = this.value = 0;
-        }
-        sample(v) {
-                this.value = (this.value*this._i + v)/(this._i + 1);
-                this._i++;
         }
 }
 
@@ -314,8 +316,10 @@ async function main() {
                         }
                 }
         });
-        let ping = rtc.createDataChannel("ping", { negotiated: true, id: 0 });
-        let speed = rtc.createDataChannel("ping", { negotiated: true, id: 1 });
+        let ping = rtc.createDataChannel(
+                "ping", { negotiated: true, id: 0, maxRetransmits: -1 });
+        let speed = rtc.createDataChannel(
+                "ping", { negotiated: true, id: 1, maxRetransmits: -1 });
         await Promise.all([select([ping, "open"]), select([speed, "open"])]);
 
         /* Run ping and speed tests. */
@@ -330,53 +334,63 @@ async function main() {
                         latencyDisplay.textContent = `${ms} ms`;
                 }).start();
 
-                let op = await select([testButton, "click"], [speed, "message"]);
+                let op = await select(
+                        [testButton, "click"], [speed, "message"], [speed, "error"]);
+                if (op.name === "error")
+                        throw op.event;
                 testButton.disabled = testSize.disabled = true;
 
                 await pingLoop.stop();
                 latencyDisplay.textContent = "";
 
-                let speedUpAvg = new Average();
-                let speedDownAvg = new Average();
                 let speedBytes;
                 switch (op.target) {
                 case testButton:
                         speedBytes = parseInt(testSize.value);
                         speed.send(String(speedBytes));
+                        let op2 = await select([speed, "message"], [speed, "error"]);
+                        if (op2.name === "error" || op2.event.data !== "TEST-ACK")
+                                throw op2.event;
                         break;
                 case speed:
                         speedBytes = parseInt(op.event.data);
+                        speed.send("TEST-ACK");
                         break;
                 default:
-                        throw(op.target);
+                        throw op.target;
                 }
                 let fmtSpeed = (v) => {
-                        const m = v*1e-3*1e-3*8*1e3;
+                        const m = v*1e-3*1e-3*8;
                         if (m < 1.0)
                                 return `${Math.round(m*1e3*1e1)/1e1} Kbps`;
                         else
                                 return `${Math.round(m*1e1)/1e1} Mbps`;
                 };
+                let speedUpT0 = 0, speedDownT0 = 0;
                 let speedTest = new SpeedTest(speed, speedBytes, (dir, s) => {
                         switch (dir) {
+                        case "UPLOAD-START":
+                                speedUpT0 = Date.now();
+                                break;
                         case "UPLOAD":
-                                speedUpAvg.sample(s);
                                 speedUpDisplay.textContent = fmtSpeed(s);
                                 break;
                         case "UPLOAD-END":
                                 speedUpDisplay.textContent = fmtSpeed(
-                                        speedUpAvg.value);
+                                        speedBytes/(Date.now() - speedUpT0)*1e3);
+                                break;
+                        case "DOWNLOAD-START":
+                                speedDownT0 = Date.now();
                                 break;
                         case "DOWNLOAD":
-                                speedDownAvg.sample(s);
                                 speedDownDisplay.textContent = fmtSpeed(s);
                                 break;
                         case "DOWNLOAD-END":
                                 speedDownDisplay.textContent = fmtSpeed(
-                                        speedDownAvg.value);
+                                        speedBytes/(Date.now() - speedDownT0)*1e3);
                                 break;
                         default:
-                                throw(dir);
+                                throw dir;
                         }
                 });
                 await speedTest.run(op.target === testButton);
