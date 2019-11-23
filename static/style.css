@@ -63,22 +63,16 @@ body {
         margin: 1rem 0;
 }
 #connect-popup > form {
-        margin-top: 1rem;
-        margin-bottom: 2rem;
-        display: flex;
-}
-#connect-popup > form > input,
-#connect-popup > form > button {
-        font-size: 120%;
+        margin: 1rem 0;
+        text-align: left;
 }
 #connect-popup > form > input {
+        font-size: 120%;
         text-align: center;
         width: 100%;
         box-sizing: border-box;
-        flex: auto;
 }
 #connect-popup > form > button {
-        flex: initial;
 }
 #connect-popup > dl {
         text-align: left;
