@@ -313,9 +313,9 @@ async function main() {
                 }
         });
         let ping = rtc.createDataChannel(
-                "ping", { negotiated: true, id: 0, maxRetransmits: -1 });
+                "ping", { negotiated: true, id: 0, maxRetransmits: 1000 });
         let speed = rtc.createDataChannel(
-                "ping", { negotiated: true, id: 1, maxRetransmits: -1 });
+                "ping", { negotiated: true, id: 1, maxRetransmits: 1000 });
         await Promise.all([select([ping, "open"]), select([speed, "open"])]);
 
         /* Run ping and speed tests. */
