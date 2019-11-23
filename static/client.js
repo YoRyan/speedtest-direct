@@ -1,4 +1,4 @@
-'use strict'; (async () => {
+/* jshint esversion: 9 */ (async () => { 'use strict';
 
 const STUN_SERVERS = ["stun:stun.l.google.com:19302"];
 const REPORT_INTERVAL = 200;
@@ -85,10 +85,10 @@ class SignalSocket {
         }
         async open() {
                 await this._aws.open();
-                new Promise((resolve, reject) => { this._readLoop(); });
+                promise(() => { this._loop(); });
                 return this;
         }
-        async _readLoop() {
+        async _loop() {
                 try {
                         for await (let msg of this._aws.read()) {
                                 let packet = JSON.parse(msg);
@@ -135,7 +135,7 @@ class PingTest {
                 this._channel = channel;
                 this._side = side;
                 this._callbacks = new Map();
-                new Promise((resolve, reject) => { this._loop(); });
+                promise(() => { this._loop(); });
         }
         async _loop() {
                 while (true) {
@@ -144,12 +144,14 @@ class PingTest {
                         if (op.name !== "message")
                                 break;
                         let packet = JSON.parse(op.event.data);
-                        if (packet.side === this._side
-                            && this._callbacks.has(packet.key)) {
-                                let callback = this._callbacks.get(packet.key);
-                                this._callbacks.delete(packet.key);
-                                callback();
-                        } else if (packet.side !== this._side) {
+                        if (packet.side === this._side) {
+                                if (this._callbacks.has(packet.key)) {
+                                        let callback = this._callbacks.get(
+                                                packet.key);
+                                        this._callbacks.delete(packet.key);
+                                        callback();
+                                }
+                        } else {
                                 this._channel.send(op.event.data);
                         }
                 }
@@ -214,11 +216,10 @@ class SpeedTest {
                         this._channel.send(buffer);
                         await flush(this._channel);
                 }
-                let ack = new Promise(async (resolve, reject) => {
+                let ack = promise(async () => {
                         let op = await select([this._channel, "message", "error"]);
                         if (op.name === "error" || op.event.data !== "END-ACK")
                                 throw op.event;
-                        resolve();
                 });
                 this._channel.send("END");
                 await flush(this._channel);
@@ -258,12 +259,11 @@ class AsyncGeneratorLoop {
                 if (this._run)
                         return this;
                 this._run = true;
-                this._loop = new Promise(async (resolve, reject) => {
+                this._loop = promise(async () => {
                         while (this._run) {
                                 const v = (await this._generator.next()).value;
                                 this._callback(v);
                         }
-                        resolve();
                 });
                 return this;
         }
@@ -297,7 +297,7 @@ async function main() {
                 if (event.candidate)
                         await ss.send({ candidate: event.candidate }, otherId);
         });
-        new Promise(async (resolve, reject) => {
+        promise(async () => {
                 while (true) {
                         const msg = (await readFrom(ss, otherId)).Data;
                         if (msg.answer !== undefined) {
@@ -462,6 +462,18 @@ async function sleep(ms) {
                         setTimeout(() => { resolve(); }, ms);
                 else
                         reject("invalid timeout value");
+        });
+}
+async function promise(task, ...args) {
+        return new Promise((resolve, reject) => {
+                let res;
+                try {
+                        res = task(...args);
+                } catch (err) {
+                        reject(err);
+                        return;
+                }
+                resolve(res);
         });
 }
 async function select() {
