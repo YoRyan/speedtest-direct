@@ -1,4 +1,5 @@
-/* jshint esversion: 9 */ (async () => { 'use strict';
+/* jshint esversion: 9 */
+import { bip39Words } from "./words.js";
 
 const STUN_SERVERS = ["stun:stun.l.google.com:19302"];
 const REPORT_INTERVAL = 200;
@@ -429,7 +430,7 @@ async function pair(socket) {
         }
 }
 function idWords(id) {
-        const words = Bip39Words;
+        const words = bip39Words;
         let digits = [];
         let v = id;
         do {
@@ -439,7 +440,7 @@ function idWords(id) {
         return digits.map((d) => words[d]);
 }
 function wordsId() {
-        const words = Bip39Words;
+        const words = bip39Words;
         let id = 0;
         for (let i = arguments.length - 1; i >= 0; i--) {
                 const v = words.findIndex((w) => w === arguments[i].toLowerCase());
@@ -504,5 +505,3 @@ async function select(...sources) {
 }
 
 main();
-
-})();
