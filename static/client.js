@@ -163,8 +163,9 @@ class PingTest {
                         await new Promise((resolve, reject) => {
                                 this._send(t0, resolve);
                         });
-                        yield Date.now() - t0;
-                        await sleep(1000);
+                        const now = Date.now();
+                        yield now - t0;
+                        await sleep(Math.max(t0 + 1000 - now, 0));
                 }
         }
         _send(theKey, callback) {
