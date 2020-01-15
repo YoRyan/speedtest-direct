@@ -4,6 +4,9 @@ import { bip39Words } from "./words.js";
 const STUN_SERVERS = ["stun:stun.l.google.com:19302"];
 const REPORT_INTERVAL = 200;
 
+class TimeoutError extends Error {
+        constructor() { super(...arguments); }
+}
 class Semaphore {
         constructor(value) {
                 if (typeof value !== "number" || value < 0)
@@ -17,9 +20,20 @@ class Semaphore {
                 if (consumer !== undefined)
                         consumer();
         }
-        async down() {
+        _dequeue(consumer) {
+                let idx = this._waiting.findIndex((e) => e === consumer);
+                if (idx !== -1)
+                        this._waiting.splice(idx, 1);
+        }
+        async down(timeout = 0) {
+                const em = `failed to acquire semaphore within ${timeout}ms`;
                 if (this._value === 0)
                         await new Promise((resolve, reject) => {
+                                if (timeout > 0)
+                                        setTimeout(() => {
+                                                this._dequeue(resolve);
+                                                reject(new TimeoutError(em));
+                                        }, timeout);
                                 this._waiting.push(resolve);
                         });
                 this._value--;
@@ -38,8 +52,8 @@ class Queue {
                 this._queue.push(value);
                 this._semConsume.up();
         }
-        async get() {
-                await this._semConsume.down();
+        async get(timeout = 0) {
+                await this._semConsume.down(timeout);
                 let value = this._queue.shift();
                 this._semProduce.up();
                 return value;
@@ -110,20 +124,24 @@ class SignalSocket {
                 this._pending.forEach((q, id) => { q.put(null); });
                 this._pending = new Map();
         }
-        async send(data, destination) {
+        async send(data, destination, timeout = 0) {
+                if (this._err !== null)
+                        throw this._err;
                 const id = ++this._counter;
                 let wait = new Channel();
                 this._pending.set(id, wait);
                 this._aws.send(JSON.stringify({ Datab64: btoa(JSON.stringify(data)),
                                                 Dest: destination, Id: id }));
-                const ack = await wait.get();
+                const ack = await wait.get(timeout);
                 if (ack === null)
                         throw this._err;
                 return ack;
         }
-        async *read() {
+        async *read(timeout = 0) {
+                if (this._err !== null)
+                        throw this._err;
                 while (true) {
-                        const packet = await this._readq.get();
+                        const packet = await this._readq.get(timeout);
                         if (packet === null)
                                 throw this._err;
                         yield { Data: JSON.parse(atob(packet.Datab64)),
