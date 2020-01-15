@@ -175,33 +175,25 @@ class PingTest {
         }
 }
 class SpeedTest {
-        constructor(channel, totalBytes, callback) {
+        constructor(channel, totalBytes, callbacks) {
                 this._channel = channel;
                 this._total = totalBytes;
-                this._callback = callback;
+                /* Callbacks:
+                 *   uploadStart, uploadProgress, uploadSpeed, uploadEnd,
+                 *   downloadStart, downloadProgress, downloadSpeed, downloadEnd */
+                this._callbacks = callbacks;
         }
         async run(sendFirst) {
-                let upload = async () => {
-                        this._callback("UPLOAD-START", undefined);
-                        for await (let speed of this._upload())
-                                this._callback("UPLOAD", speed);
-                        this._callback("UPLOAD-END", undefined);
-                };
-                let download = async () => {
-                        this._callback("DOWNLOAD-START", undefined);
-                        for await (let speed of this._download())
-                                this._callback("DOWNLOAD", speed);
-                        this._callback("DOWNLOAD-END", undefined);
-                };
                 if (sendFirst) {
-                        await upload();
-                        await download();
+                        await this._upload();
+                        await this._download();
                 } else {
-                        await download();
-                        await upload();
+                        await this._download();
+                        await this._upload();
                 }
         }
-        async *_upload() {
+        async _upload() {
+                this._callbacks.uploadStart();
                 const buffer = new ArrayBuffer(16*1e3);
                 const nBuf = Math.ceil(this._total/buffer.byteLength);
                 let flush = async (ch) => {
@@ -211,12 +203,15 @@ class SpeedTest {
                 for (let i = 0, i0 = 0, t0 = Date.now(); i < nBuf; i++) {
                         const now = Date.now();
                         if (now - t0 >= REPORT_INTERVAL) {
-                                yield (i - i0)*buffer.byteLength/(now - t0)*1e3;
+                                this._callbacks.uploadSpeed(
+                                        (i - i0)*buffer.byteLength/(now - t0)*1e3);
                                 i0 = i;
                                 t0 = now;
                         }
                         this._channel.send(buffer);
                         await flush(this._channel);
+                        this._callbacks.uploadProgress(
+                                i*buffer.byteLength/this._total);
                 }
                 let ack = promise(async () => {
                         let op = await select([this._channel, "message", "error"]);
@@ -226,16 +221,19 @@ class SpeedTest {
                 this._channel.send("END");
                 await flush(this._channel);
                 await ack;
+                this._callbacks.uploadEnd();
         }
-        async *_download() {
-                let bytes = 0;
+        async _download() {
+                this._callbacks.downloadStart();
+                let bytes = 0, bytes0 = 0;
                 let t0 = Date.now();
                 let received;
                 do {
                         const now = Date.now();
                         if (now - t0 >= REPORT_INTERVAL) {
-                                yield bytes/(now - t0)*1e3;
-                                bytes = 0;
+                                this._callbacks.downloadSpeed(
+                                        (bytes - bytes0)/(now - t0)*1e3);
+                                bytes0 = bytes;
                                 t0 = now;
                         }
                         let op = await select([this._channel, "message", "error"]);
@@ -246,8 +244,10 @@ class SpeedTest {
                                 bytes += received.byteLength;
                         else if (received.size !== undefined) /* firefox */
                                 bytes += received.size;
+                        this._callbacks.downloadProgress(bytes/this._total);
                 } while (received !== "END");
                 this._channel.send("END-ACK");
+                this._callbacks.downloadEnd();
         }
 }
 class AsyncGeneratorLoop {
@@ -328,6 +328,7 @@ async function main() {
                 let speedDownDisplay = document.querySelector("#speed-down > span");
                 let speedUpDisplay = document.querySelector("#speed-up > span");
                 let latencyDisplay = document.querySelector("#latency > span");
+                let progressDisplay = document.querySelector("#progress");
                 testButton.disabled = testSize.disabled = false;
 
                 let pingTest = new PingTest(ping, Number(initiator));
@@ -360,38 +361,35 @@ async function main() {
                 default:
                         throw op.target;
                 }
-                let fmtSpeed = (v) => {
-                        const m = v*1e-3*1e-3*8;
-                        if (m < 1.0)
-                                return `${Math.round(m*1e3*1e1)/1e1} Kbps`;
-                        else
-                                return `${Math.round(m*1e1)/1e1} Mbps`;
-                };
                 let speedUpT0 = 0, speedDownT0 = 0;
-                let speedTest = new SpeedTest(speed, speedBytes, (dir, s) => {
-                        switch (dir) {
-                        case "UPLOAD-START":
-                                speedUpT0 = Date.now();
-                                break;
-                        case "UPLOAD":
+                let speedTest = new SpeedTest(speed, speedBytes, {
+                        uploadStart: () => { speedUpT0 = Date.now(); },
+                        uploadProgress: (p) => {
+                                let pct = `${Math.round(p*100)}%`;
+                                progressDisplay.textContent =
+                                        `${fmtSize(speedBytes)} - ${pct}`;
+                        },
+                        uploadSpeed: (s) => {
                                 speedUpDisplay.textContent = fmtSpeed(s);
-                                break;
-                        case "UPLOAD-END":
+                        },
+                        uploadEnd: () => {
                                 speedUpDisplay.textContent = fmtSpeed(
                                         speedBytes/(Date.now() - speedUpT0)*1e3);
-                                break;
-                        case "DOWNLOAD-START":
-                                speedDownT0 = Date.now();
-                                break;
-                        case "DOWNLOAD":
+                                progressDisplay.textContent = "";
+                        },
+                        downloadStart: () => { speedDownT0 = Date.now(); },
+                        downloadProgress: (p) => {
+                                let pct = `${Math.round(p*100)}%`;
+                                progressDisplay.textContent =
+                                        `${fmtSize(speedBytes)} - ${pct}`;
+                        },
+                        downloadSpeed: (s) => {
                                 speedDownDisplay.textContent = fmtSpeed(s);
-                                break;
-                        case "DOWNLOAD-END":
+                        },
+                        downloadEnd: () => {
                                 speedDownDisplay.textContent = fmtSpeed(
                                         speedBytes/(Date.now() - speedDownT0)*1e3);
-                                break;
-                        default:
-                                throw dir;
+                                progressDisplay.textContent = "";
                         }
                 });
                 await speedTest.run(op.target === testButton);
@@ -450,6 +448,20 @@ function wordsId() {
                 id += v*Math.pow(words.length, arguments.length - i - 1);
         }
         return id;
+}
+function fmtSize(v) {
+        const m = v*1e-3*1e-3;
+        if (m < 1.0)
+                return `${Math.round(m*1e3)} KiB`;
+        else
+                return `${Math.round(m)} MiB`;
+}
+function fmtSpeed(v) {
+        const m = v*1e-3*1e-3*8;
+        if (m < 1.0)
+                return `${Math.round(m*1e3*1e1)/1e1} Kbps`;
+        else
+                return `${Math.round(m*1e1)/1e1} Mbps`;
 }
 async function readFrom(socket, id) {
         let gen = socket.read();
