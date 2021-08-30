@@ -8,5 +8,6 @@ RUN go build -a -installsuffix cgo -o ./out/speedtest .
 FROM scratch
 COPY --from=build /src/out/speedtest /main
 COPY ./static static
+USER 10001
 EXPOSE 8080
 CMD ["/main", "-path", "static"]
